@@ -52,9 +52,12 @@ namespace scan_matching {
 // An implementation of "Real-Time Correlative Scan Matching" by Olson.
 class RealTimeCorrelativeScanMatcher2D {
  public:
+  // explicit用来防止由构造函数定义的隐式转换
   explicit RealTimeCorrelativeScanMatcher2D(
       const proto::RealTimeCorrelativeScanMatcherOptions& options);
 
+  // 为了能够让程序员显式的禁用某个函数，C++11
+  // 标准引入了一个新特性："=delete"函数。程序员只需在函数声明后上“=delete;”，就可将该函数禁用。
   RealTimeCorrelativeScanMatcher2D(const RealTimeCorrelativeScanMatcher2D&) =
       delete;
   RealTimeCorrelativeScanMatcher2D& operator=(

@@ -245,8 +245,10 @@ bool FastCorrelativeScanMatcher2D::MatchWithSearchParameters(
                            initial_pose_estimate.translation().y()));
   search_parameters.ShrinkToFit(discrete_scans, limits_.cell_limits());
 
+  // 计算低分辨率匹配，一个粗的排序？
   const std::vector<Candidate2D> lowest_resolution_candidates =
       ComputeLowestResolutionCandidates(discrete_scans, search_parameters);
+  // 分支定界搜索，得到最优匹配
   const Candidate2D best_candidate = BranchAndBound(
       discrete_scans, search_parameters, lowest_resolution_candidates,
       precomputation_grid_stack_->max_depth(), min_score);

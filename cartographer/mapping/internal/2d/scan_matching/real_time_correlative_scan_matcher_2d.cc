@@ -120,23 +120,29 @@ double RealTimeCorrelativeScanMatcher2D::Match(
     transform::Rigid2d* pose_estimate) const {
   CHECK(pose_estimate != nullptr);
 
+  // 根据初始位姿得出旋转变量，同时将点云数据根据旋转变量进行旋转 得到旋转点云数据 
   const Eigen::Rotation2Dd initial_rotation = initial_pose_estimate.rotation();
   const sensor::PointCloud rotated_point_cloud = sensor::TransformPointCloud(
       point_cloud,
       transform::Rigid3f::Rotation(Eigen::AngleAxisf(
           initial_rotation.cast<float>().angle(), Eigen::Vector3f::UnitZ())));
+  // 跟据option_（lua读取的参数）以及旋转点云数据确定搜索窗口（SearchParameters）
   const SearchParameters search_parameters(
       options_.linear_search_window(), options_.angular_search_window(),
       rotated_point_cloud, grid.limits().resolution());
 
+  // 根据角度的步长，生成旋转扫描点，可能是论文里面说第一层角度的循环
   const std::vector<sensor::PointCloud> rotated_scans =
       GenerateRotatedScans(rotated_point_cloud, search_parameters);
+  // 将旋转的激光数据转换并离散化为整数向量索引，DiscreteScan2D也是vector
   const std::vector<DiscreteScan2D> discrete_scans = DiscretizeScans(
       grid.limits(), rotated_scans,
       Eigen::Translation2f(initial_pose_estimate.translation().x(),
                            initial_pose_estimate.translation().y()));
+  // 穷举搜索生成候选者
   std::vector<Candidate2D> candidates =
       GenerateExhaustiveSearchCandidates(search_parameters);
+  // 计算集合中每个Candidate2D的分数
   ScoreCandidates(grid, discrete_scans, search_parameters, &candidates);
 
   const Candidate2D& best_candidate =
