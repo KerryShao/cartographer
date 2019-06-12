@@ -1,0 +1,6 @@
+{
+    "files.exclude": {
+        "**/3d": true,
+        "**/*_3d*": true
+    }
+}
