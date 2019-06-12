@@ -55,7 +55,7 @@
             "intelliSenseMode": "gcc-x64",
             "browse": {
                 "path": [
-                    "${workspaceRoot}"
+                    "${workspaceRoot}/**"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""

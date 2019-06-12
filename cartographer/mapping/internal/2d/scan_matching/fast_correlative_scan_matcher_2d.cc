@@ -38,12 +38,13 @@ namespace {
 // A collection of values which can be added and later removed, and the maximum
 // of the current values in the collection can be retrieved.
 // All of it in (amortized) O(1).
+// 最大值保存在 front
 class SlidingWindowMaximum {
  public:
   void AddValue(const float value) {
     while (!non_ascending_maxima_.empty() &&
            value > non_ascending_maxima_.back()) {
-      non_ascending_maxima_.pop_back();
+      non_ascending_maxima_.pop_back(); // 删除所有比 value 的元素
     }
     non_ascending_maxima_.push_back(value);
   }
@@ -88,6 +89,14 @@ CreateFastCorrelativeScanMatcherOptions2D(
   return options;
 }
 
+/**
+ * @brief Construct a new Precomputation Grid 2D
+ * 
+ * @param grid 
+ * @param limits 
+ * @param width     地图缩放比例，width 个网格合并为 1 个网格
+ * @param reusable_intermediate_grid  缩小后的地图，保存 width x width 范围内的最大值
+ */
 PrecomputationGrid2D::PrecomputationGrid2D(
     const Grid2D& grid, const CellLimits& limits, const int width,
     std::vector<float>* reusable_intermediate_grid)
@@ -96,41 +105,62 @@ PrecomputationGrid2D::PrecomputationGrid2D(
                    limits.num_y_cells + width - 1),
       min_score_(1.f - grid.GetMaxCorrespondenceCost()),
       max_score_(1.f - grid.GetMinCorrespondenceCost()),
+      // 比原始地图多了 width - 1 的网格，占用内存比较多，参考 intermediate
       cells_(wide_limits_.num_x_cells * wide_limits_.num_y_cells) {
   CHECK_GE(width, 1);
   CHECK_GE(limits.num_x_cells, 1);
   CHECK_GE(limits.num_y_cells, 1);
   const int stride = wide_limits_.num_x_cells;
+
   // First we compute the maximum probability for each (x0, y) achieved in the
   // span defined by x0 <= x < x0 + width.
+
+  // 比原始地图多了 width - 1 的边界，占用内存比较多，参考 cells_
   std::vector<float>& intermediate = *reusable_intermediate_grid;
   intermediate.resize(wide_limits_.num_x_cells * limits.num_y_cells);
   for (int y = 0; y != limits.num_y_cells; ++y) {
     SlidingWindowMaximum current_values;
+
+    // [0]
     current_values.AddValue(
         1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(0, y))));
+
     for (int x = -width + 1; x != 0; ++x) {
+      // [0 ... width - 2]
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
+
+      // [1 ... width - 1]
       if (x + width < limits.num_x_cells) {
         current_values.AddValue(1.f - std::abs(grid.GetCorrespondenceCost(
                                           Eigen::Array2i(x + width, y))));
       }
     }
+
+    // 此时 current_values 已有 width 个值
+    // 此时 intermediate 的 y 行已经设置 width - 1 个值
+
     for (int x = 0; x < limits.num_x_cells - width; ++x) {
+      // [width - 1 ... limits.num_x_cells - 2]
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       current_values.RemoveValue(
           1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(x, y))));
+      // [width ... limits.num_x_cells - 1]
       current_values.AddValue(1.f - std::abs(grid.GetCorrespondenceCost(
                                         Eigen::Array2i(x + width, y))));
     }
+
     for (int x = std::max(limits.num_x_cells - width, 0);
          x != limits.num_x_cells; ++x) {
+      // [limits.num_x_cells - 1 ... limits.num_x_cells + width - 2]
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       current_values.RemoveValue(
           1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(x, y))));
     }
+
+    // 为什么要检查？
     current_values.CheckIsEmpty();
   }
+
   // For each (x, y), we compute the maximum probability in the width x width
   // region starting at each (x, y) and precompute the resulting bound on the
   // score.

@@ -8,6 +8,12 @@
         "list": "cpp",
         "vector": "cpp",
         "*.tcc": "cpp",
-        "core": "cpp"
+        "core": "cpp",
+        "functional": "cpp",
+        "system_error": "cpp",
+        "xtr1common": "cpp",
+        "ratio": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp"
     }
 }
