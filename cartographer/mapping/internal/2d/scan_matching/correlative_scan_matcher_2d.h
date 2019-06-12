@@ -34,6 +34,7 @@ typedef std::vector<Eigen::Array2i> DiscreteScan2D;
 // Describes the search space.
 struct SearchParameters {
   // Linear search window in pixel offsets; bounds are inclusive.
+  // 单位是网格
   struct LinearBounds {
     int min_x;
     int max_x;

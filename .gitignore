@@ -1,4 +1,5 @@
 build
 bazel-*
 *.bin
+ipch
 *.ipch

@@ -24,6 +24,14 @@ namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
+/**
+ * @brief Construct a new Search Parameters:: Search Parameters object
+ * 
+ * @param linear_search_window    xy单方向的搜索范围，单位：米
+ * @param angular_search_window 
+ * @param point_cloud 
+ * @param resolution              地图分辨率
+ */
 SearchParameters::SearchParameters(const double linear_search_window,
                                    const double angular_search_window,
                                    const sensor::PointCloud& point_cloud,
@@ -36,7 +44,9 @@ SearchParameters::SearchParameters(const double linear_search_window,
     const float range = point.position.head<2>().norm();
     max_scan_range = std::max(range, max_scan_range);
   }
-  const double kSafetyMargin = 1. - 1e-3;
+
+  // 根据论文公式 7，计算角度搜索步长
+  const double kSafetyMargin = 1. - 1e-3; // ??? 接近 1，目的是啥？
   angular_perturbation_step_size =
       kSafetyMargin * std::acos(1. - common::Pow2(resolution) /
                                          (2. * common::Pow2(max_scan_range)));
@@ -45,7 +55,7 @@ SearchParameters::SearchParameters(const double linear_search_window,
   num_scans = 2 * num_angular_perturbations + 1;
 
   const int num_linear_perturbations =
-      std::ceil(linear_search_window / resolution);
+      std::ceil(linear_search_window / resolution); // 计算需要搜索的网格数
   linear_bounds.reserve(num_scans);
   for (int i = 0; i != num_scans; ++i) {
     linear_bounds.push_back(
@@ -117,6 +127,8 @@ std::vector<DiscreteScan2D> DiscretizeScans(
     discrete_scans.emplace_back();
     discrete_scans.back().reserve(scan.size());
     for (const sensor::RangefinderPoint& point : scan) {
+      // 获取向量的前n个元素：head(n)
+      // 2D 激光 point.position 的第 3项为 0
       const Eigen::Vector2f translated_point =
           Eigen::Affine2f(initial_translation) * point.position.head<2>();
       discrete_scans.back().push_back(

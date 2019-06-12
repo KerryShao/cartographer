@@ -58,6 +58,11 @@ float ComputeCandidateScore(const TSDF2D& tsdf,
   return candidate_score;
 }
 
+/**
+ * @brief 计算 scan 在概率地图中的分值
+ * 直接将 scan 集中的网格的概率相加然后平均
+ * 
+ */
 float ComputeCandidateScore(const ProbabilityGrid& probability_grid,
                             const DiscreteScan2D& discrete_scan,
                             int x_index_offset, int y_index_offset) {
@@ -127,22 +132,23 @@ double RealTimeCorrelativeScanMatcher2D::Match(
       transform::Rigid3f::Rotation(Eigen::AngleAxisf(
           initial_rotation.cast<float>().angle(), Eigen::Vector3f::UnitZ())));
   // 跟据option_（lua读取的参数）以及旋转点云数据确定搜索窗口（SearchParameters）
+  // 缺省配置是 20 度：angular_search_window = math.rad(20.),
   const SearchParameters search_parameters(
       options_.linear_search_window(), options_.angular_search_window(),
       rotated_point_cloud, grid.limits().resolution());
 
-  // 根据角度的步长，生成旋转扫描点，可能是论文里面说第一层角度的循环
+  // 根据角度的步长，生成旋转扫描点，返回值是点云的 vector，也就是多组点云
   const std::vector<sensor::PointCloud> rotated_scans =
       GenerateRotatedScans(rotated_point_cloud, search_parameters);
-  // 将旋转的激光数据转换并离散化为整数向量索引，DiscreteScan2D也是vector
+  // 将旋转的激光数据（点云格式，浮点数）转换并离散化为整数向量索引，DiscreteScan2D也是vector
   const std::vector<DiscreteScan2D> discrete_scans = DiscretizeScans(
       grid.limits(), rotated_scans,
       Eigen::Translation2f(initial_pose_estimate.translation().x(),
                            initial_pose_estimate.translation().y()));
-  // 穷举搜索生成候选者
+  // 穷举搜索生成候选者，candidates 包含具体的搜索参数 xyθ 和匹配分值 score
   std::vector<Candidate2D> candidates =
       GenerateExhaustiveSearchCandidates(search_parameters);
-  // 计算集合中每个Candidate2D的分数
+  // 计算集合中每个 Candidate2D 的分数
   ScoreCandidates(grid, discrete_scans, search_parameters, &candidates);
 
   const Candidate2D& best_candidate =

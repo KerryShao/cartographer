@@ -2,5 +2,11 @@
     "files.exclude": {
         "**/3d": true,
         "**/*_3d*": true
+    },
+    "files.associations": {
+        "deque": "cpp",
+        "list": "cpp",
+        "vector": "cpp",
+        "*.tcc": "cpp"
     }
 }
