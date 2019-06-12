@@ -53,15 +53,8 @@
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "gcc-x64",
-            "browse": {
-                "path": [
-                    "${workspaceRoot}/**"
-                ],
-                "limitSymbolsToIncludedHeaders": true,
-                "databaseFilename": ""
-            },
             "includePath": [
-                "${workspaceRoot}"
+                "${workspaceRoot}/**"
             ]
         }
     ],

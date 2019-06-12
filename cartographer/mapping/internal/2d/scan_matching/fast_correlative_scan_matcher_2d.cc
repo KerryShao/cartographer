@@ -105,7 +105,7 @@ PrecomputationGrid2D::PrecomputationGrid2D(
                    limits.num_y_cells + width - 1),
       min_score_(1.f - grid.GetMaxCorrespondenceCost()),
       max_score_(1.f - grid.GetMinCorrespondenceCost()),
-      // 比原始地图多了 width - 1 的网格，占用内存比较多，参考 intermediate
+      // 比原始地图多了 width - 1 的网格，占用内存会比较多，参考 intermediate
       cells_(wide_limits_.num_x_cells * wide_limits_.num_y_cells) {
   CHECK_GE(width, 1);
   CHECK_GE(limits.num_x_cells, 1);
@@ -164,6 +164,7 @@ PrecomputationGrid2D::PrecomputationGrid2D(
   // For each (x, y), we compute the maximum probability in the width x width
   // region starting at each (x, y) and precompute the resulting bound on the
   // score.
+  // 缩放地图的结果保存在 cells_ 里面
   for (int x = 0; x != wide_limits_.num_x_cells; ++x) {
     SlidingWindowMaximum current_values;
     current_values.AddValue(intermediate[x]);
@@ -201,6 +202,7 @@ uint8 PrecomputationGrid2D::ComputeCellValue(const float probability) const {
 PrecomputationGridStack2D::PrecomputationGridStack2D(
     const Grid2D& grid,
     const proto::FastCorrelativeScanMatcherOptions2D& options) {
+  // branch_and_bound_depth 缺省值 8
   CHECK_GE(options.branch_and_bound_depth(), 1);
   const int max_width = 1 << (options.branch_and_bound_depth() - 1);
   precomputation_grids_.reserve(options.branch_and_bound_depth());
@@ -210,6 +212,8 @@ PrecomputationGridStack2D::PrecomputationGridStack2D(
                                      limits.num_y_cells);
   for (int i = 0; i != options.branch_and_bound_depth(); ++i) {
     const int width = 1 << i;
+    // 创建 PrecomputationGrid2D
+    // 每次都会创建缩放的地图，尺寸还是 limits + width - 1
     precomputation_grids_.emplace_back(grid, limits, width,
                                        &reusable_intermediate_grid);
   }
@@ -275,7 +279,7 @@ bool FastCorrelativeScanMatcher2D::MatchWithSearchParameters(
                            initial_pose_estimate.translation().y()));
   search_parameters.ShrinkToFit(discrete_scans, limits_.cell_limits());
 
-  // 计算低分辨率匹配，一个粗的排序？
+  // 计算低分辨率匹配
   const std::vector<Candidate2D> lowest_resolution_candidates =
       ComputeLowestResolutionCandidates(discrete_scans, search_parameters);
   // 分支定界搜索，得到最优匹配
@@ -305,11 +309,19 @@ FastCorrelativeScanMatcher2D::ComputeLowestResolutionCandidates(
   return lowest_resolution_candidates;
 }
 
+/**
+ * @brief 生成最低分辨率的所有的可行解
+ * 计算线性步长的时候要考虑分辨率的影响
+ * @param search_parameters 
+ * @return std::vector<Candidate2D> 
+ */
 std::vector<Candidate2D>
 FastCorrelativeScanMatcher2D::GenerateLowestResolutionCandidates(
     const SearchParameters& search_parameters) const {
+  //计算步长，在最高的分辨率中增量为 1，在最低的分辨率中增量为 2^(h)，h 为缩放层数，从 0 开始编号
   const int linear_step_size = 1 << precomputation_grid_stack_->max_depth();
   int num_candidates = 0;
+  // 计算低分辨率地图的尺寸
   for (int scan_index = 0; scan_index != search_parameters.num_scans;
        ++scan_index) {
     const int num_lowest_resolution_linear_x_candidates =
@@ -323,10 +335,13 @@ FastCorrelativeScanMatcher2D::GenerateLowestResolutionCandidates(
     num_candidates += num_lowest_resolution_linear_x_candidates *
                       num_lowest_resolution_linear_y_candidates;
   }
+
+  // 三层 for 循环，把每一个可行解都存入 candidates 中
   std::vector<Candidate2D> candidates;
   candidates.reserve(num_candidates);
   for (int scan_index = 0; scan_index != search_parameters.num_scans;
        ++scan_index) {
+    // 不同分辨率地图的尺寸相同（保存地图的内存并没有减小），有效值在步长的倍数上
     for (int x_index_offset = search_parameters.linear_bounds[scan_index].min_x;
          x_index_offset <= search_parameters.linear_bounds[scan_index].max_x;
          x_index_offset += linear_step_size) {
@@ -364,6 +379,16 @@ void FastCorrelativeScanMatcher2D::ScoreCandidates(
             std::greater<Candidate2D>());
 }
 
+/**
+ * @brief 
+ * 
+ * @param discrete_scans 
+ * @param search_parameters 
+ * @param candidates          候选解，第一次调用时是最低分辨率匹配的结果
+ * @param candidate_depth     候选解的地图层数，原始大小（最高分辨率）为 0
+ * @param min_score 
+ * @return Candidate2D 
+ */
 Candidate2D FastCorrelativeScanMatcher2D::BranchAndBound(
     const std::vector<DiscreteScan2D>& discrete_scans,
     const SearchParameters& search_parameters,
@@ -377,11 +402,14 @@ Candidate2D FastCorrelativeScanMatcher2D::BranchAndBound(
   Candidate2D best_high_resolution_candidate(0, 0, 0, search_parameters);
   best_high_resolution_candidate.score = min_score;
   for (const Candidate2D& candidate : candidates) {
-    if (candidate.score <= min_score) {
+    // 候选解小于 min_score，丢弃分支
+    if (candidate.score <= min_score) { ///??? 为什么不是 best_high_resolution_candidate.score
       break;
     }
+
     std::vector<Candidate2D> higher_resolution_candidates;
     const int half_width = 1 << (candidate_depth - 1);
+    // 该节点分解为四个子节点：分枝
     for (int x_offset : {0, half_width}) {
       if (candidate.x_index_offset + x_offset >
           search_parameters.linear_bounds[candidate.scan_index].max_x) {
@@ -392,20 +420,26 @@ Candidate2D FastCorrelativeScanMatcher2D::BranchAndBound(
             search_parameters.linear_bounds[candidate.scan_index].max_y) {
           break;
         }
+
+        // 添加高分辨率地图上的候选解
         higher_resolution_candidates.emplace_back(
             candidate.scan_index, candidate.x_index_offset + x_offset,
             candidate.y_index_offset + y_offset, search_parameters);
       }
     }
+
+    // 计算候选解（最多 4 个）得分
     ScoreCandidates(precomputation_grid_stack_->Get(candidate_depth - 1),
                     discrete_scans, search_parameters,
                     &higher_resolution_candidates);
+    // DFS 到最高分辨率，best_high_resolution_candidate 保存对应的 score
     best_high_resolution_candidate = std::max(
-        best_high_resolution_candidate,
+        best_high_resolution_candidate, // 这里是个为 min_score 的初始值 
         BranchAndBound(discrete_scans, search_parameters,
                        higher_resolution_candidates, candidate_depth - 1,
-                       best_high_resolution_candidate.score));
+                       best_high_resolution_candidate.score)); // 这里更新 min_score
   }
+
   return best_high_resolution_candidate;
 }
 
