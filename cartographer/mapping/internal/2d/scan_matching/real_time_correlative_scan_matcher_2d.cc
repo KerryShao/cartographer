@@ -102,7 +102,7 @@ RealTimeCorrelativeScanMatcher2D::GenerateExhaustiveSearchCandidates(
   std::vector<Candidate2D> candidates;
   candidates.reserve(num_candidates);
   for (int scan_index = 0; scan_index != search_parameters.num_scans;
-       ++scan_index) {
+       ++scan_index) { // scan_index 对应旋转
     for (int x_index_offset = search_parameters.linear_bounds[scan_index].min_x;
          x_index_offset <= search_parameters.linear_bounds[scan_index].max_x;
          ++x_index_offset) {

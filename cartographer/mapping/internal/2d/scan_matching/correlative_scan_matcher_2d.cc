@@ -29,7 +29,7 @@ namespace scan_matching {
  * 
  * @param linear_search_window    xy单方向的搜索范围，单位：米
  * @param angular_search_window 
- * @param point_cloud 
+ * @param point_cloud             扫描数据，xy格式
  * @param resolution              地图分辨率
  */
 SearchParameters::SearchParameters(const double linear_search_window,
