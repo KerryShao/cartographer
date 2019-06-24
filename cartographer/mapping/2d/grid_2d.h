@@ -124,6 +124,7 @@ class Grid2D : public GridInterface {
 
   // Bounding box of known cells to efficiently compute cropping limits.
   Eigen::AlignedBox2i known_cells_box_;
+  // int[0, 32767] ---> float[low, up]
   const std::vector<float>* value_to_correspondence_cost_table_;
 };
 

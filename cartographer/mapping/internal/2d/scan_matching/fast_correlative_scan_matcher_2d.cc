@@ -38,17 +38,23 @@ namespace {
 // A collection of values which can be added and later removed, and the maximum
 // of the current values in the collection can be retrieved.
 // All of it in (amortized) O(1).
+// 存储最大值的滑动窗口
 // 最大值保存在 front
 class SlidingWindowMaximum {
  public:
+  // 插入 value
+  // 按照大小找到在 sliding window 中的位置，删除所有比 value 小的元素
   void AddValue(const float value) {
     while (!non_ascending_maxima_.empty() &&
            value > non_ascending_maxima_.back()) {
-      non_ascending_maxima_.pop_back(); // 删除所有比 value 的元素
+      non_ascending_maxima_.pop_back();
     }
+    // value 成为最小值
     non_ascending_maxima_.push_back(value);
   }
 
+  // 删除值 value
+  // 只有 value 是最大值时才删除
   void RemoveValue(const float value) {
     // DCHECK for performance, since this is done for every value in the
     // precomputation grid.
@@ -92,20 +98,20 @@ CreateFastCorrelativeScanMatcherOptions2D(
 /**
  * @brief Construct a new Precomputation Grid 2D
  * 
- * @param grid 
- * @param limits 
+ * @param grid      对应的概率地图(原始地图)
+ * @param limits    地图参数
  * @param width     地图缩放比例，width 个网格合并为 1 个网格
- * @param reusable_intermediate_grid  缩小后的地图，保存 width x width 范围内的最大值
+ * @param reusable_intermediate_grid  可以重复使用的中间栅格，用来计算最大值的一个中间值
  */
 PrecomputationGrid2D::PrecomputationGrid2D(
     const Grid2D& grid, const CellLimits& limits, const int width,
     std::vector<float>* reusable_intermediate_grid)
     : offset_(-width + 1, -width + 1),
-      wide_limits_(limits.num_x_cells + width - 1,
+      wide_limits_(limits.num_x_cells + width - 1, //!!! 比 grid 多 width - 1
                    limits.num_y_cells + width - 1),
-      min_score_(1.f - grid.GetMaxCorrespondenceCost()),
+      min_score_(1.f - grid.GetMaxCorrespondenceCost()), // 1 - cost = prob
       max_score_(1.f - grid.GetMinCorrespondenceCost()),
-      // 比原始地图多了 width - 1 的网格，占用内存会比较多，参考 intermediate
+      //!!! 新分配内存，尺寸接近概率地图
       cells_(wide_limits_.num_x_cells * wide_limits_.num_y_cells) {
   CHECK_GE(width, 1);
   CHECK_GE(limits.num_x_cells, 1);
@@ -114,19 +120,20 @@ PrecomputationGrid2D::PrecomputationGrid2D(
 
   // First we compute the maximum probability for each (x0, y) achieved in the
   // span defined by x0 <= x < x0 + width.
-
-  // 比原始地图多了 width - 1 的边界，占用内存比较多，参考 cells_
+  // 对 grid 的每一行进行处理
+  // intermediate 比 grid 多 width - 1
+  // intermediate 元素 (x,y) 被设置为 grid 上 ([x - width - 1, x],y) 中的最大值
   std::vector<float>& intermediate = *reusable_intermediate_grid;
   intermediate.resize(wide_limits_.num_x_cells * limits.num_y_cells);
   for (int y = 0; y != limits.num_y_cells; ++y) {
     SlidingWindowMaximum current_values;
 
-    // [0]
+    // grid [0]
     current_values.AddValue(
         1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(0, y))));
 
+    // intermediate [0 ... width - 2]
     for (int x = -width + 1; x != 0; ++x) {
-      // [0 ... width - 2]
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
 
       // [1 ... width - 1]
@@ -136,35 +143,31 @@ PrecomputationGrid2D::PrecomputationGrid2D(
       }
     }
 
-    // 此时 current_values 已有 width 个值
-    // 此时 intermediate 的 y 行已经设置 width - 1 个值
-
+    // [width - 1 ... limits.num_x_cells - 2]
     for (int x = 0; x < limits.num_x_cells - width; ++x) {
-      // [width - 1 ... limits.num_x_cells - 2]
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
+      // 滑动窗口，只保留 [x + 1, x + width - 1] 间的最大值
       current_values.RemoveValue(
           1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(x, y))));
-      // [width ... limits.num_x_cells - 1]
       current_values.AddValue(1.f - std::abs(grid.GetCorrespondenceCost(
                                         Eigen::Array2i(x + width, y))));
     }
 
+    // [limits.num_x_cells - 1 ... limits.num_x_cells + width - 2]
     for (int x = std::max(limits.num_x_cells - width, 0);
          x != limits.num_x_cells; ++x) {
-      // [limits.num_x_cells - 1 ... limits.num_x_cells + width - 2]
       intermediate[x + width - 1 + y * stride] = current_values.GetMaximum();
       current_values.RemoveValue(
           1.f - std::abs(grid.GetCorrespondenceCost(Eigen::Array2i(x, y))));
     }
 
-    // 为什么要检查？
+    // 如果运行 ok，此时 current_values 应该为空
     current_values.CheckIsEmpty();
   }
 
   // For each (x, y), we compute the maximum probability in the width x width
   // region starting at each (x, y) and precompute the resulting bound on the
   // score.
-  // 缩放地图的结果保存在 cells_ 里面
   for (int x = 0; x != wide_limits_.num_x_cells; ++x) {
     SlidingWindowMaximum current_values;
     current_values.AddValue(intermediate[x]);
@@ -191,6 +194,7 @@ PrecomputationGrid2D::PrecomputationGrid2D(
   }
 }
 
+// float prob[0.0-1.0] to int prob[0-255]
 uint8 PrecomputationGrid2D::ComputeCellValue(const float probability) const {
   const int cell_value = common::RoundToInt(
       (probability - min_score_) * (255.f / (max_score_ - min_score_)));
@@ -199,6 +203,13 @@ uint8 PrecomputationGrid2D::ComputeCellValue(const float probability) const {
   return cell_value;
 }
 
+/**
+ * @brief Construct a new PrecomputationGridStack2D
+ * 这里会分配大量的内存 = 地图层数 * 地图尺寸 * unint8
+ * 
+ * @param grid 
+ * @param options 
+ */
 PrecomputationGridStack2D::PrecomputationGridStack2D(
     const Grid2D& grid,
     const proto::FastCorrelativeScanMatcherOptions2D& options) {

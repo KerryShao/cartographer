@@ -26,6 +26,7 @@ namespace {
 constexpr uint16 kUpdateMarker = 1u << 15;
 
 // 0 is unknown, [1, 32767] maps to [lower_bound, upper_bound].
+// 32767 = 2^15 - 1
 float SlowValueToBoundedFloat(const uint16 value, const uint16 unknown_value,
                               const float unknown_result,
                               const float lower_bound,
