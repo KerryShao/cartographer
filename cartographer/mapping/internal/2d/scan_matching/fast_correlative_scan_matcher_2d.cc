@@ -407,14 +407,16 @@ Candidate2D FastCorrelativeScanMatcher2D::BranchAndBound(
     float min_score) const {
   if (candidate_depth == 0) {
     // Return the best candidate.
-    return *candidates.begin();
+    return *candidates.begin(); // candidates 已经按 score 从大到小排列
   }
 
+  // FIXME: 如果所有解的 score 都小于 min_score，这里会返回 initial_pose_estimate
+  // best_high_resolution_candidate 应该设置为一个非法的初值
   Candidate2D best_high_resolution_candidate(0, 0, 0, search_parameters);
   best_high_resolution_candidate.score = min_score;
   for (const Candidate2D& candidate : candidates) {
     // 候选解小于 min_score，丢弃分支
-    if (candidate.score <= min_score) { ///??? 为什么不是 best_high_resolution_candidate.score
+    if (candidate.score <= min_score) { // QA: 为什么不是 best_high_resolution_candidate.score
       break;
     }
 

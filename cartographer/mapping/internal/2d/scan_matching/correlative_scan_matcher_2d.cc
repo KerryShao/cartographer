@@ -80,6 +80,7 @@ SearchParameters::SearchParameters(const int num_linear_perturbations,
   }
 }
 
+// linear_bounds 的初值 = 搜索步长（单位：米）/ 网格分辨率
 void SearchParameters::ShrinkToFit(const std::vector<DiscreteScan2D>& scans,
                                    const CellLimits& cell_limits) {
   CHECK_EQ(scans.size(), num_scans);
@@ -88,10 +89,10 @@ void SearchParameters::ShrinkToFit(const std::vector<DiscreteScan2D>& scans,
     Eigen::Array2i min_bound = Eigen::Array2i::Zero();
     Eigen::Array2i max_bound = Eigen::Array2i::Zero();
     for (const Eigen::Array2i& xy_index : scans[i]) {
-      min_bound = min_bound.min(-xy_index);
+      min_bound = min_bound.min(-xy_index); // max xy_index -> -(max xy_index)
       max_bound = max_bound.max(Eigen::Array2i(cell_limits.num_x_cells - 1,
                                                cell_limits.num_y_cells - 1) -
-                                xy_index);
+                                xy_index); // min xy_index -> size - xy_index
     }
     linear_bounds[i].min_x = std::max(linear_bounds[i].min_x, min_bound.x());
     linear_bounds[i].max_x = std::min(linear_bounds[i].max_x, max_bound.x());
